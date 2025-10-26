@@ -7,8 +7,13 @@
 </div>
 
 <div class="row">
+
   <!-- Sample Note Card -->
   <div class="col-md-4">
+=======
+  Sample Note Card 
+   <div class="col-md-4">
+
     <div class="card shadow-sm mb-4">
       <div class="card-body">
         <h5 class="card-title">Introduction to Data Science</h5>
