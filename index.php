@@ -1,29 +1,72 @@
-<?php include 'includes/header.php'; ?>
-<h2 class="text-center mb-4">📚 Shared Notes</h2>
+<?php
+require_once 'config/db.php';
+require_once 'includes/auth.php';
 
-<div class="search-bar mb-4 text-center">
-  <input type="text" class="form-control w-50 d-inline" placeholder="Search notes by title...">
-  <button class="btn btn-primary ms-2">Search</button>
-</div>
+$pageTitle = 'Home - Notes Sharing Platform';
 
-<div class="row">
+// Fetch all notes
+$search = $_GET['search'] ?? '';
+$sql = "SELECT n.*, u.username FROM notes n 
+        JOIN users u ON n.user_id = u.id";
 
-  <!-- Sample Note Card -->
-  <div class="col-md-4">
-=======
-  Sample Note Card 
-   <div class="col-md-4">
+if ($search) {
+    $search = $conn->real_escape_string($search);
+    $sql .= " WHERE n.title LIKE '%$search%' OR n.description LIKE '%$search%'";
+}
 
-    <div class="card shadow-sm mb-4">
-      <div class="card-body">
-        <h5 class="card-title">Introduction to Data Science</h5>
-        <p class="card-text text-muted">Uploaded by: Kavisha</p>
-        <p class="small text-secondary">Description: Basic concepts and tools used in data science.</p>
-        <a href="view_note.php" class="btn btn-outline-primary btn-sm">View</a>
-        <a href="#" class="btn btn-outline-success btn-sm">Download</a>
-      </div>
-    </div>
-  </div>
+$sql .= " ORDER BY n.created_at DESC";
+$result = $conn->query($sql);
+
+include 'includes/header.php';
+?>
+
+<div class="container">
+    <section class="hero">
+        <h1>Welcome to NotesShare</h1>
+        <p>Share your study notes and access thousands of resources</p>
+        <?php if (!isLoggedIn()): ?>
+            <div class="hero-buttons">
+                <a href="register.php" class="btn btn-primary">Get Started</a>
+                <a href="login.php" class="btn btn-secondary">Login</a>
+            </div>
+        <?php else: ?>
+            <a href="upload.php" class="btn btn-primary">Upload Your Note</a>
+        <?php endif; ?>
+    </section>
+
+    <section class="search-section">
+        <form method="GET" action="index.php" class="search-form">
+            <input type="text" name="search" placeholder="Search notes..." value="<?php echo htmlspecialchars($search); ?>" class="search-input">
+            <button type="submit" class="btn btn-search">Search</button>
+        </form>
+    </section>
+
+    <section class="notes-section">
+        <h2>Available Notes</h2>
+        <?php if ($result && $result->num_rows > 0): ?>
+            <div class="notes-grid">
+                <?php while ($note = $result->fetch_assoc()): ?>
+                    <div class="note-card">
+                        <div class="note-icon">📄</div>
+                        <h3><?php echo htmlspecialchars($note['title']); ?></h3>
+                        <p class="note-description"><?php echo htmlspecialchars(substr($note['description'], 0, 100)) . (strlen($note['description']) > 100 ? '...' : ''); ?></p>
+                        <div class="note-meta">
+                            <span class="note-author">By: <?php echo htmlspecialchars($note['username']); ?></span>
+                            <span class="note-downloads">📥 <?php echo $note['downloads']; ?></span>
+                        </div>
+                        <div class="note-actions">
+                            <a href="view_note.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-primary">View Details</a>
+                            <a href="download.php?id=<?php echo $note['id']; ?>" class="btn btn-sm btn-secondary">Download</a>
+                        </div>
+                    </div>
+                <?php endwhile; ?>
+            </div>
+        <?php else: ?>
+            <div class="empty-state">
+                <p>No notes found. Be the first to share!</p>
+            </div>
+        <?php endif; ?>
+    </section>
 </div>
 
 <?php include 'includes/footer.php'; ?>
