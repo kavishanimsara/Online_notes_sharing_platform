@@ -26,9 +26,11 @@ if (session_status() === PHP_SESSION_NONE) {
             <ul class="nav-menu" id="navMenu">
                 <li><a href="index.php">Home</a></li>
                 <?php if (isset($_SESSION['user_id'])): ?>
-                    <li><a href="upload.php">Upload Note</a></li>
                     <li><a href="#" class="user-info">Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?></a></li>
+                    <li><a href="upload.php">Upload Note</a></li>
+                    <li><a href="dashboard.php">Dashboard</a></li>
                     <li><a href="logout.php" class="btn-logout">Logout</a></li>
+              
                 <?php else: ?>
                     <li><a href="login.php">Login</a></li>
                     <li><a href="register.php" class="btn-register">Register</a></li>
