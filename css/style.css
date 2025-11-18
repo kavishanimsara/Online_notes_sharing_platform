@@ -375,10 +375,12 @@ textarea.form-control {
     border: 1px solid var(--secondary-color);
 }
 
-/* Upload Form */
+/* Upload Page Specific Styles */
 .upload-container {
     display: flex;
     justify-content: center;
+    align-items: center;
+    min-height: calc(100vh - 200px);
     padding: 40px 0;
 }
 
@@ -397,10 +399,55 @@ textarea.form-control {
     margin-bottom: 30px;
 }
 
+.upload-form {
+    margin-bottom: 20px;
+}
+
+.upload-form .form-group {
+    margin-bottom: 25px;
+}
+
+.upload-form label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--dark-color);
+    font-weight: 500;
+}
+
+.upload-form .form-control {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-size: 1rem;
+    transition: border-color 0.3s;
+}
+
+.upload-form .form-control:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.upload-form textarea.form-control {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.upload-form input[type="file"] {
+    padding: 10px;
+    background: #f8f9fa;
+    cursor: pointer;
+}
+
+.upload-form input[type="file"]:hover {
+    background: #e9ecef;
+}
+
 .upload-info {
     text-align: center;
     margin-top: 20px;
     color: #95A5A6;
+    font-style: italic;
 }
 
 /* Note Detail */
@@ -535,6 +582,16 @@ textarea.form-control {
     .auth-box, .upload-box {
         padding: 30px 20px;
     }
+
+    .upload-container {
+        padding: 20px 0;
+        min-height: calc(100vh - 120px);
+    }
+    
+    .upload-box {
+        padding: 30px 20px;
+        margin: 10px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -552,5 +609,84 @@ textarea.form-control {
 
     .note-card {
         padding: 20px;
+    }
+
+    .upload-box {
+        padding: 20px 15px;
+    }
+    
+    .upload-box h2 {
+        font-size: 1.5rem;
+    }
+}
+
+/* Category Sections */
+.category-section {
+    margin-bottom: 40px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+.category-header {
+    background: linear-gradient(135deg, var(--primary-color), #357ABD);
+    color: white;
+    padding: 20px 25px;
+    border-bottom: 3px solid var(--secondary-color);
+}
+
+.category-header h3 {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.category-icon {
+    font-size: 1.2rem;
+}
+
+.note-count {
+    font-size: 0.9rem;
+    opacity: 0.9;
+    font-weight: 400;
+    margin-left: 10px;
+}
+
+.category-section .notes-grid {
+    padding: 25px;
+    margin: 0;
+}
+
+.category-section .note-card {
+    margin-bottom: 20px;
+}
+
+.category-section .note-card:last-child {
+    margin-bottom: 0;
+}
+
+/* Category section responsive */
+@media (max-width: 768px) {
+    .category-header {
+        padding: 15px 20px;
+    }
+    
+    .category-header h3 {
+        font-size: 1.2rem;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .category-section .notes-grid {
+        padding: 20px;
+    }
+    
+    .category-section .notes-grid {
+        grid-template-columns: 1fr;
     }
 }
