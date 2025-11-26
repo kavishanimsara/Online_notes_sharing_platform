@@ -49,23 +49,93 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             // Insert new user with enhanced fields
             $hashed_password = password_hash($password, PASSWORD_DEFAULT);
             
-            // Prepare the SQL statement with all fields - COUNT THE PLACEHOLDERS CAREFULLY
-            // We have 14 placeholders (?) and 14 variables to bind
-            $stmt = $conn->prepare("INSERT INTO users (
-                username, email, password, full_name, age, gender,
-                institution_type, institution_name, grade_level,
-                bio, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+            // Check which columns exist in users table
+            $check_columns = $conn->query("SHOW COLUMNS FROM users LIKE 'full_name'");
+            $has_full_name = $check_columns->num_rows > 0;
+            
+            $check_age = $conn->query("SHOW COLUMNS FROM users LIKE 'age'");
+            $has_age = $check_age->num_rows > 0;
+            
+            $check_gender = $conn->query("SHOW COLUMNS FROM users LIKE 'gender'");
+            $has_gender = $check_gender->num_rows > 0;
+            
+            $check_institution_type = $conn->query("SHOW COLUMNS FROM users LIKE 'institution_type'");
+            $has_institution_type = $check_institution_type->num_rows > 0;
+            
+            $check_institution_name = $conn->query("SHOW COLUMNS FROM users LIKE 'institution_name'");
+            $has_institution_name = $check_institution_name->num_rows > 0;
+            
+            $check_grade_level = $conn->query("SHOW COLUMNS FROM users LIKE 'grade_level'");
+            $has_grade_level = $check_grade_level->num_rows > 0;
+            
+            $check_bio = $conn->query("SHOW COLUMNS FROM users LIKE 'bio'");
+            $has_bio = $check_bio->num_rows > 0;
+            
+            // Build dynamic INSERT query based on available columns
+            $fields = ['username', 'email', 'password']; // Fixed: Added quotes around 'password'
+            $placeholders = ['?', '?', '?'];
+            $values = [$username, $email, $hashed_password];
+            $types = 'sss'; // Fixed: Changed to 'sss' for three strings
+            
+            if ($has_full_name) {
+                $fields[] = 'full_name';
+                $placeholders[] = '?';
+                $values[] = $full_name;
+                $types .= 's';
+            }
+            
+            if ($has_age) {
+                $fields[] = 'age';
+                $placeholders[] = '?';
+                $values[] = $age;
+                $types .= 'i';
+            }
+            
+            if ($has_gender) {
+                $fields[] = 'gender';
+                $placeholders[] = '?';
+                $values[] = $gender;
+                $types .= 's';
+            }
+            
+            if ($has_institution_type) {
+                $fields[] = 'institution_type';
+                $placeholders[] = '?';
+                $values[] = $institution_type;
+                $types .= 's';
+            }
+            
+            if ($has_institution_name) {
+                $fields[] = 'institution_name';
+                $placeholders[] = '?';
+                $values[] = $institution_name;
+                $types .= 's';
+            }
+            
+            if ($has_grade_level) {
+                $fields[] = 'grade_level';
+                $placeholders[] = '?';
+                $values[] = $grade_level;
+                $types .= 's';
+            }
+            
+            if ($has_bio) {
+                $fields[] = 'bio';
+                $placeholders[] = '?';
+                $values[] = $bio;
+                $types .= 's';
+            }
+            
+            $fields[] = 'created_at';
+            $placeholders[] = 'NOW()';
+            
+            $sql = "INSERT INTO users (" . implode(', ', $fields) . ") VALUES (" . implode(', ', $placeholders) . ")";
+            $stmt = $conn->prepare($sql);
             
             if ($stmt) {
-                // Bind parameters - make sure types match the database schema
-                // s = string, i = integer, s = string, s = string, i = integer, s = string, s = string, s = string, s = string, s = string, s = string, s = string, s = string, s = string
-                // That's 14 's' for 14 string parameters (age is integer)
-                $stmt->bind_param("ssssisssss",
-                    $username, $email, $hashed_password, $full_name, $age,
-                    $gender, $institution_type, $institution_name,
-                    $grade_level, $bio
-                );
+                // Remove NOW() from values array for bind_param
+                $bind_values = array_slice($values, 0, count($values));
+                $stmt->bind_param($types, ...$bind_values);
 
                 if ($stmt->execute()) {
                     $success = 'Registration successful! You can now login.';
@@ -86,6 +156,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
 include 'includes/header.php';
 ?>
+
+<!-- Interactive Background -->
+<div class="interactive-bg">
+    <div class="floating-shapes">
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+    </div>
+</div>
 
 <div class="container">
     <div class="auth-container">
@@ -133,6 +213,7 @@ include 'includes/header.php';
                                 <small class="form-text">3-20 characters, letters, numbers, underscore only</small>
                             </div>
                         </div>
+                    </div>
 
                     <div class="form-group">
                         <label for="email">Email Address <span class="required">*</span></label>
@@ -180,7 +261,6 @@ include 'includes/header.php';
                             </div>
                         </div>
                     </div>
-
                 </div>
 
                 <div class="form-section">
@@ -212,6 +292,7 @@ include 'includes/header.php';
                         <label for="institution_name">Institution Name</label>
                         <input type="text" id="institution_name" name="institution_name" class="form-control" 
                                value="<?php echo isset($_POST['institution_name']) ? htmlspecialchars($_POST['institution_name']) : ''; ?>">
+                    </div>
                 </div>
 
                 <div class="form-section">

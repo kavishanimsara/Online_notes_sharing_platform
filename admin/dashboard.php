@@ -162,7 +162,7 @@ if ($has_status_column) {
                     <h4 class="text-white">
                         <i class="bi bi-shield-lock"></i> Admin Panel
                     </h4>
-                    <p class="text-muted small">Welcome, <?php echo $_SESSION['admin_name']; ?></p>
+                    <p class="text-muted small">Welcome, <?php echo $_SESSION['admin_name'] ?? $_SESSION['admin_username'] ?? 'Admin'; ?></p>
                     <p class="text-warning small">
                         <i class="bi bi-person-badge"></i> 
                         <?php echo ucfirst(str_replace('_', ' ', $admin_level)); ?>
@@ -220,7 +220,7 @@ if ($has_status_column) {
                     <?php endif; ?>
                     
                     <?php if (in_array('view_activities', $permissions)): ?>
-                    <a href="admin/activities.php" class="nav-link <?php echo !$has_activity_table ? 'feature-disabled' : ''; ?>">
+                    <a href="activities.php" class="nav-link <?php echo !$has_activity_table ? 'feature-disabled' : ''; ?>">
                         <i class="bi bi-activity"></i> Activity Log
                         <?php if (!$has_activity_table): ?>
                             <small class="float-end text-warning"><i class="bi bi-exclamation-triangle"></i></small>
@@ -251,7 +251,7 @@ if ($has_status_column) {
                 <div class="alert alert-warning mb-4">
                     <h6><i class="bi bi-exclamation-triangle"></i> Some Features Need Setup</h6>
                     <p class="mb-2">Some admin features require additional database tables/columns. Features with <i class="bi bi-exclamation-triangle text-warning"></i> are currently unavailable.</p>
-                    <a href="../database_setup.php" class="btn btn-sm btn-warning">Run Database Setup</a>
+                    <a href="../complete_database_setup.php" class="btn btn-sm btn-warning">Run Database Setup</a>
                 </div>
                 <?php endif; ?>
 

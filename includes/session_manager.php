@@ -1,5 +1,5 @@
 <?php
-require_once 'config/db.php';
+require_once __DIR__ . '/../config/db.php';
 
 // Create sessions table if it doesn't exist
 $create_sessions_table = "
@@ -18,15 +18,13 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 
 $result = $conn->query($create_sessions_table);
 if (!$result) {
-    echo "Error creating sessions table: " . $conn->error . "\n";
-} else {
-    echo "✓ Sessions table created successfully\n";
+    error_log("Error creating sessions table: " . $conn->error);
 }
 
 // Verify table was actually created
 $check_table = $conn->query("SHOW TABLES LIKE 'user_sessions'");
 if ($check_table->num_rows == 0) {
-    echo "⚠️ Warning: Sessions table may not have been created properly\n";
+    error_log("Warning: Sessions table may not have been created properly");
 }
 
 // Function to track user session
@@ -48,17 +46,17 @@ function trackUserSession($user_id) {
     $ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
     $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
     
-    try {
-        // Clean up old sessions for this user
-        $stmt = $conn->prepare("DELETE FROM user_sessions WHERE user_id = ?");
+try {
+        // Clean up old sessions for this user (but not the current session)
+        $stmt = $conn->prepare("DELETE FROM user_sessions WHERE user_id = ? AND session_id != ?");
         if ($stmt) {
-            $stmt->bind_param("i", $user_id);
+            $stmt->bind_param("is", $user_id, $session_id);
             $stmt->execute();
             $stmt->close();
         }
         
-        // Insert new session
-        $stmt = $conn->prepare("INSERT INTO user_sessions (user_id, session_id, ip_address, user_agent) VALUES (?, ?, ?, ?)");
+        // Insert new session (or update if exists)
+        $stmt = $conn->prepare("INSERT INTO user_sessions (user_id, session_id, ip_address, user_agent) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE last_activity = CURRENT_TIMESTAMP");
         if ($stmt) {
             $stmt->bind_param("isss", $user_id, $session_id, $ip_address, $user_agent);
             $stmt->execute();
@@ -141,5 +139,5 @@ function isCurrentSessionValid() {
     return true;
 }
 
-echo "Session management system initialized!\n";
+
 ?>

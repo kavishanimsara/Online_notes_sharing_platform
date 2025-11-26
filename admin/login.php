@@ -21,14 +21,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($username) || empty($password)) {
         $error = 'Please enter username and password';
     } else {
-        // Check if user exists and is an admin
-        $stmt = $conn->prepare("
-            SELECT u.id, u.username, u.password, u.full_name, u.email, 
-                   a.admin_level, a.is_active as admin_active, a.permissions
-            FROM users u 
-            INNER JOIN admins a ON u.id = a.user_id 
-            WHERE u.username = ? AND a.is_active = 1
-        ");
+// Check if admins table exists
+        $check_admins_table = $conn->query("SHOW TABLES LIKE 'admins'");
+        $has_admins_table = $check_admins_table->num_rows > 0;
+        
+        if ($has_admins_table) {
+            // Check if user exists and is an admin
+            $stmt = $conn->prepare("
+                SELECT u.id, u.username, u.password, u.full_name, u.email, 
+                       a.admin_level, a.is_active as admin_active, a.permissions
+                FROM users u 
+                INNER JOIN admins a ON u.id = a.user_id 
+                WHERE u.username = ? AND a.is_active = 1
+            ");
+        } else {
+            // Fallback: Check if user has admin role in users table
+            $stmt = $conn->prepare("
+                SELECT id, username, password, full_name, email, role as admin_level, 
+                       is_active as admin_active, NULL as permissions
+                FROM users 
+                WHERE username = ? AND (role = 'admin' OR role = 'super_admin') AND is_active = 1
+            ");
+        }
         $stmt->bind_param("s", $username);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -45,11 +59,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $_SESSION['admin_email'] = $user['email'];
                 $_SESSION['admin_permissions'] = json_decode($user['permissions'], true) ?? [];
                 
-                // Update last login
-                $update_stmt = $conn->prepare("UPDATE admins SET last_login = NOW() WHERE user_id = ?");
-                $update_stmt->bind_param("i", $user['id']);
-                $update_stmt->execute();
-                $update_stmt->close();
+// Update last login
+                if ($has_admins_table) {
+                    $update_stmt = $conn->prepare("UPDATE admins SET last_login = NOW() WHERE user_id = ?");
+                    $update_stmt->bind_param("i", $user['id']);
+                    $update_stmt->execute();
+                    $update_stmt->close();
+                } else {
+                    $update_stmt = $conn->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
+                    $update_stmt->bind_param("i", $user['id']);
+                    $update_stmt->execute();
+                    $update_stmt->close();
+                }
                 
                 // Log login activity - NOW this function is available
                 logAdminActivity($conn, 'admin_login', 'admin', $user['id'], 'Admin logged in successfully');

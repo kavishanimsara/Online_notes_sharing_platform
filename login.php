@@ -1,10 +1,26 @@
 <?php
+session_start();
 require_once 'config/db.php';
 require_once 'includes/auth.php';
 
 $pageTitle = 'Login - Notes Sharing Platform';
 $error = '';
 $success = '';
+
+// Handle error messages from URL parameters
+if (isset($_GET['error'])) {
+    switch ($_GET['error']) {
+        case 'session_expired':
+            $error = 'Your session has expired. Please login again.';
+            break;
+        case 'banned':
+            $error = 'Your account has been banned. Please contact administrator.';
+            break;
+        case 'access_denied':
+            $error = 'Access denied. You do not have permission to access this page.';
+            break;
+    }
+}
 
 if (isLoggedIn()) {
     header('Location: index.php');

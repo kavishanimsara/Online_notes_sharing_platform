@@ -10,15 +10,130 @@ if (!isset($_SESSION['admin_id']) || empty($_SESSION['admin_id'])) {
 
 $pageTitle = 'Manage Categories';
 
+// Get main categories for subcategory dropdown
+$main_categories = [];
+$main_categories_stmt = $conn->prepare("SELECT id, name FROM categories WHERE parent_id IS NULL ORDER BY name");
+$main_categories_stmt->execute();
+$main_categories_result = $main_categories_stmt->get_result();
+while ($row = $main_categories_result->fetch_assoc()) {
+    $main_categories[] = $row;
+}
+$main_categories_stmt->close();
+
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_category'])) {
     $name = trim($_POST['name']);
     $description = trim($_POST['description']);
     
     if (!empty($name)) {
-        $stmt = $conn->prepare("INSERT INTO categories (name, description) VALUES (?, ?)");
-        $stmt->bind_param("ss", $name, $description);
+        // Generate slug from name
+        $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '-', $name));
+        $slug = trim($slug, '-');
+        
+        // Check if slug already exists and make it unique
+        $original_slug = $slug;
+        $counter = 1;
+        while (true) {
+            $check_slug = $conn->prepare("SELECT id FROM categories WHERE slug = ?");
+            $check_slug->bind_param("s", $slug);
+            $check_slug->execute();
+            $result = $check_slug->get_result();
+            
+            if ($result->num_rows == 0) {
+                $check_slug->close();
+                break;
+            }
+            
+            $slug = $original_slug . '-' . $counter;
+            $counter++;
+            $check_slug->close();
+        }
+        
+        // Check if slug column exists in table
+        $check_slug_column = $conn->query("SHOW COLUMNS FROM categories LIKE 'slug'");
+        $has_slug_column = $check_slug_column->num_rows > 0;
+        
+        if ($has_slug_column) {
+            // Insert with slug
+            $stmt = $conn->prepare("INSERT INTO categories (name, description, slug) VALUES (?, ?, ?)");
+            $stmt->bind_param("sss", $name, $description, $slug);
+        } else {
+            // Insert without slug (for backward compatibility)
+            $stmt = $conn->prepare("INSERT INTO categories (name, description) VALUES (?, ?)");
+            $stmt->bind_param("ss", $name, $description);
+        }
+        
         $stmt->execute();
+        $stmt->close();
+        
+        // Redirect to avoid form resubmission
+        header('Location: categories.php');
+        exit();
+    }
+}
+
+// Handle subcategory form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_subcategory'])) {
+    $name = trim($_POST['subcategory_name']);
+    $description = trim($_POST['subcategory_description']);
+    $parent_id = intval($_POST['parent_category']);
+    
+    if (!empty($name) && !empty($parent_id)) {
+        // Generate slug from name
+        $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '-', $name));
+        $slug = trim($slug, '-');
+        
+        // Ensure slug is not empty, use timestamp as fallback
+        if (empty($slug)) {
+            $slug = 'subcategory-' . time();
+        }
+        
+        // Check if slug already exists and make it unique
+        $original_slug = $slug;
+        $counter = 1;
+        while (true) {
+            $check_slug = $conn->prepare("SELECT id FROM categories WHERE slug = ?");
+            $check_slug->bind_param("s", $slug);
+            $check_slug->execute();
+            $result = $check_slug->get_result();
+            
+            if ($result->num_rows == 0) {
+                $check_slug->close();
+                break;
+            }
+            
+            $slug = $original_slug . '-' . $counter;
+            $counter++;
+            $check_slug->close();
+        }
+        
+        // Check if required columns exist
+        $check_status = $conn->query("SHOW COLUMNS FROM categories LIKE 'status'");
+        $has_status = $check_status->num_rows > 0;
+        
+        $check_slug_column = $conn->query("SHOW COLUMNS FROM categories LIKE 'slug'");
+        $has_slug_column = $check_slug_column->num_rows > 0;
+        
+        if ($has_status && $has_slug_column) {
+            // Insert with status and slug
+            $stmt = $conn->prepare("INSERT INTO categories (name, description, parent_id, slug, status, created_by, created_at) VALUES (?, ?, ?, ?, 'pending', ?, NOW())");
+            $stmt->bind_param("ssisi", $name, $description, $parent_id, $slug, $_SESSION['admin_id']);
+        } elseif ($has_slug_column) {
+            // Insert with slug but no status
+            $stmt = $conn->prepare("INSERT INTO categories (name, description, parent_id, slug) VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("ssis", $name, $description, $parent_id, $slug);
+        } elseif ($has_status) {
+            // Insert with status but no slug
+            $stmt = $conn->prepare("INSERT INTO categories (name, description, parent_id, status, created_by, created_at) VALUES (?, ?, ?, 'pending', ?, NOW())");
+            $stmt->bind_param("ssii", $name, $description, $parent_id, $_SESSION['admin_id']);
+        } else {
+            // Insert without status and slug (backward compatibility)
+            $stmt = $conn->prepare("INSERT INTO categories (name, description, parent_id) VALUES (?, ?, ?)");
+            $stmt->bind_param("ssi", $name, $description, $parent_id);
+        }
+        
+        $stmt->execute();
+        $stmt->close();
         
         // Redirect to avoid form resubmission
         header('Location: categories.php');
@@ -32,13 +147,22 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
     $action = $_GET['action'];
     $admin_id = $_SESSION['admin_id'];
     
-    if ($action === 'delete') {
-        $conn->query("DELETE FROM categories WHERE id = $category_id");
+if ($action === 'delete') {
+        $stmt = $conn->prepare("DELETE FROM categories WHERE id = ?");
+        $stmt->bind_param("i", $category_id);
+        $stmt->execute();
+        $stmt->close();
     } elseif ($action === 'approve') {
-        $conn->query("UPDATE categories SET status = 'approved', approved_by = $admin_id, approved_at = NOW() WHERE id = $category_id");
+        $stmt = $conn->prepare("UPDATE categories SET status = 'approved', approved_by = ?, approved_at = NOW() WHERE id = ?");
+        $stmt->bind_param("ii", $admin_id, $category_id);
+        $stmt->execute();
+        $stmt->close();
     } elseif ($action === 'reject') {
         $reject_reason = $_GET['reason'] ?? 'Does not meet guidelines';
-        $conn->query("UPDATE categories SET status = 'rejected', approved_by = $admin_id, approved_at = NOW(), rejection_reason = '$reject_reason' WHERE id = $category_id");
+        $stmt = $conn->prepare("UPDATE categories SET status = 'rejected', approved_by = ?, approved_at = NOW(), rejection_reason = ? WHERE id = ?");
+        $stmt->bind_param("isi", $admin_id, $reject_reason, $category_id);
+        $stmt->execute();
+        $stmt->close();
     }
     
     // Redirect to avoid resubmission
@@ -134,9 +258,9 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
                         <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
                             <i class="bi bi-plus-circle"></i> Add Category
                         </button>
-                        <a href="create_subcategory.php" class="btn btn-outline-primary">
+<button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addSubCategoryModal">
                             <i class="bi bi-folder-plus"></i> Create Subcategory
-                        </a>
+                        </button>
                         <a href="dashboard.php" class="btn btn-outline-secondary">
                             <i class="bi bi-arrow-left"></i> Back to Dashboard
                         </a>
@@ -336,6 +460,45 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" name="add_category" class="btn btn-success">Add Category</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+<!-- Add Subcategory Modal -->
+    <div class="modal fade" id="addSubCategoryModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title">Add New Subcategory</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form method="POST" action="categories.php">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Parent Category *</label>
+                            <select name="parent_category" class="form-select" required>
+                                <option value="">Select Parent Category</option>
+                                <?php foreach ($main_categories as $category): ?>
+                                    <option value="<?php echo $category['id']; ?>">
+                                        <?php echo htmlspecialchars($category['name']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Subcategory Name *</label>
+                            <input type="text" name="subcategory_name" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea name="subcategory_description" class="form-control" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" name="add_subcategory" class="btn btn-info">Add Subcategory</button>
                     </div>
                 </form>
             </div>

@@ -18,13 +18,36 @@ $stats['total_notes'] = $result->fetch_assoc()['count'];
 $result = $conn->query("SELECT COALESCE(SUM(downloads), 0) as total FROM notes WHERE user_id = $user_id");
 $stats['total_downloads'] = $result->fetch_assoc()['total'];
 
+// Check if views column exists
+$check_views = $conn->query("SHOW COLUMNS FROM notes LIKE 'views'");
+$has_views = $check_views->num_rows > 0;
+
 // Total views
-$result = $conn->query("SELECT COALESCE(SUM(views), 0) as total FROM notes WHERE user_id = $user_id");
-$stats['total_views'] = $result->fetch_assoc()['total'];
+if ($has_views) {
+    $result = $conn->query("SELECT COALESCE(SUM(views), 0) as total FROM notes WHERE user_id = $user_id");
+    $stats['total_views'] = $result->fetch_assoc()['total'];
+} else {
+    $stats['total_views'] = 0; // Default if column doesn't exist
+}
+
+// Check if likes_count column exists
+$check_likes_count = $conn->query("SHOW COLUMNS FROM notes LIKE 'likes_count'");
+$has_likes_count = $check_likes_count->num_rows > 0;
 
 // Total likes
-$result = $conn->query("SELECT COALESCE(SUM(likes_count), 0) as total FROM notes WHERE user_id = $user_id");
-$stats['total_likes'] = $result->fetch_assoc()['total'];
+if ($has_likes_count) {
+    $result = $conn->query("SELECT COALESCE(SUM(likes_count), 0) as total FROM notes WHERE user_id = $user_id");
+    $stats['total_likes'] = $result->fetch_assoc()['total'];
+} else {
+    // Calculate from note_likes table if it exists
+    $check_likes_table = $conn->query("SHOW TABLES LIKE 'note_likes'");
+    if ($check_likes_table->num_rows > 0) {
+        $result = $conn->query("SELECT COUNT(*) as total FROM note_likes nl JOIN notes n ON nl.note_id = n.id WHERE n.user_id = $user_id");
+        $stats['total_likes'] = $result->fetch_assoc()['total'];
+    } else {
+        $stats['total_likes'] = 0; // Default if neither column nor table exists
+    }
+}
 
 // Favorites count
 $result = $conn->query("SELECT COUNT(*) as count FROM favorites WHERE user_id = $user_id");
@@ -35,10 +58,20 @@ $result = $conn->query("SELECT COUNT(c.id) as count FROM comments c JOIN notes n
 $stats['comments_received'] = $result->fetch_assoc()['count'];
 
 // Recent uploads
-$recent_notes = $conn->query("SELECT * FROM notes WHERE user_id = $user_id ORDER BY created_at DESC LIMIT 5");
+$recent_notes_sql = "SELECT * FROM notes WHERE user_id = $user_id ORDER BY created_at DESC LIMIT 5";
+$recent_notes = $conn->query($recent_notes_sql);
 
-// Top performing notes
-$top_notes = $conn->query("SELECT * FROM notes WHERE user_id = $user_id ORDER BY (downloads + views + likes_count) DESC LIMIT 5");
+// Top performing notes - handle missing columns
+if ($has_views && $has_likes_count) {
+    $top_notes_sql = "SELECT * FROM notes WHERE user_id = $user_id ORDER BY (downloads + views + likes_count) DESC LIMIT 5";
+} elseif ($has_views) {
+    $top_notes_sql = "SELECT * FROM notes WHERE user_id = $user_id ORDER BY (downloads + views) DESC LIMIT 5";
+} elseif ($has_likes_count) {
+    $top_notes_sql = "SELECT * FROM notes WHERE user_id = $user_id ORDER BY (downloads + likes_count) DESC LIMIT 5";
+} else {
+    $top_notes_sql = "SELECT * FROM notes WHERE user_id = $user_id ORDER BY downloads DESC LIMIT 5";
+}
+$top_notes = $conn->query($top_notes_sql);
 
 // Download statistics - Fixed query using note creation dates and downloads
 $download_stats = $conn->query("
@@ -211,14 +244,18 @@ include 'includes/header.php';
                             while ($note = $recent_notes->fetch_assoc()): 
                         ?>
                             <a href="view_note.php?id=<?php echo $note['id']; ?>" class="list-group-item list-group-item-action">
-                                <div class="d-flex justify-content-between">
+<div class="d-flex justify-content-between">
                                     <h6 class="mb-1"><?php echo htmlspecialchars($note['title']); ?></h6>
                                     <small class="text-muted"><?php echo date('M d', strtotime($note['created_at'])); ?></small>
                                 </div>
                                 <div class="d-flex gap-3 text-muted small">
                                     <span><i class="fas fa-download"></i> <?php echo $note['downloads'] ?? 0; ?></span>
+                                    <?php if ($has_likes_count): ?>
                                     <span><i class="fas fa-heart"></i> <?php echo $note['likes_count'] ?? 0; ?></span>
+                                    <?php endif; ?>
+                                    <?php if ($has_views): ?>
                                     <span><i class="fas fa-eye"></i> <?php echo $note['views'] ?? 0; ?></span>
+                                    <?php endif; ?>
                                 </div>
                             </a>
                         <?php 
@@ -249,16 +286,25 @@ include 'includes/header.php';
                             while ($note = $top_notes->fetch_assoc()): 
                         ?>
                             <a href="view_note.php?id=<?php echo $note['id']; ?>" class="list-group-item list-group-item-action">
-                                <div class="d-flex justify-content-between">
+<div class="d-flex justify-content-between">
                                     <h6 class="mb-1"><?php echo htmlspecialchars($note['title']); ?></h6>
                                     <span class="badge bg-success">
-                                        <?php echo ($note['downloads'] ?? 0) + ($note['views'] ?? 0) + ($note['likes_count'] ?? 0); ?> total
+                                        <?php 
+                                        $total = ($note['downloads'] ?? 0);
+                                        if ($has_views) $total += ($note['views'] ?? 0);
+                                        if ($has_likes_count) $total += ($note['likes_count'] ?? 0);
+                                        echo $total; 
+                                        ?> total
                                     </span>
                                 </div>
                                 <div class="d-flex gap-3 text-muted small">
                                     <span><i class="fas fa-download"></i> <?php echo $note['downloads'] ?? 0; ?></span>
+                                    <?php if ($has_likes_count): ?>
                                     <span><i class="fas fa-heart"></i> <?php echo $note['likes_count'] ?? 0; ?></span>
+                                    <?php endif; ?>
+                                    <?php if ($has_views): ?>
                                     <span><i class="fas fa-eye"></i> <?php echo $note['views'] ?? 0; ?></span>
+                                    <?php endif; ?>
                                 </div>
                             </a>
                         <?php 

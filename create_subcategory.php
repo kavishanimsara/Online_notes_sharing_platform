@@ -29,16 +29,53 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (empty($name) || empty($parent_id)) {
         $error = 'Please fill in all required fields';
     } else {
+        // Generate slug from name
+        $slug = strtolower(preg_replace('/[^a-zA-Z0-9]+/', '-', $name));
+        $slug = trim($slug, '-');
+        
+        // Ensure slug is not empty, use timestamp as fallback
+        if (empty($slug)) {
+            $slug = 'category-' . time();
+        }
+        
+        // Check if slug already exists and make it unique
+        $original_slug = $slug;
+        $counter = 1;
+        while (true) {
+            $slug_check = $conn->prepare("SELECT id FROM categories WHERE slug = ?");
+            $slug_check->bind_param("s", $slug);
+            $slug_check->execute();
+            $slug_result = $slug_check->get_result();
+            if ($slug_result->num_rows == 0) {
+                break;
+            }
+            $slug = $original_slug . '-' . $counter;
+            $counter++;
+        }
+        $slug_check->close();
+        
         // Check if status column exists
         $check_status = $conn->query("SHOW COLUMNS FROM categories LIKE 'status'");
         $has_status = $check_status->num_rows > 0;
         
-        if ($has_status) {
-            // Insert with pending status
+        // Check if slug column exists
+        $check_slug = $conn->query("SHOW COLUMNS FROM categories LIKE 'slug'");
+        $has_slug = $check_slug->num_rows > 0;
+        
+        if ($has_status && $has_slug) {
+            // Insert with status and slug
+            $stmt = $conn->prepare("INSERT INTO categories (name, description, parent_id, slug, status, created_by, created_at) VALUES (?, ?, ?, ?, 'pending', ?, NOW())");
+            $stmt->bind_param("ssisi", $name, $description, $parent_id, $slug, $_SESSION['user_id']);
+        } elseif ($has_slug) {
+            // Insert with slug but no status
+            $stmt = $conn->prepare("INSERT INTO categories (name, description, parent_id, slug) VALUES (?, ?, ?, ?)");
+            $stmt->bind_param("ssis", $name, $description, $parent_id, $slug);
+        } elseif ($has_status) {
+            // Insert with status but no slug
             $stmt = $conn->prepare("INSERT INTO categories (name, description, parent_id, status, created_by, created_at) VALUES (?, ?, ?, 'pending', ?, NOW())");
             $stmt->bind_param("ssii", $name, $description, $parent_id, $_SESSION['user_id']);
         } else {
-            // Insert without status (backward compatibility)
+            // Insert without status and slug (backward compatibility)
             $stmt = $conn->prepare("INSERT INTO categories (name, description, parent_id) VALUES (?, ?, ?)");
             $stmt->bind_param("ssi", $name, $description, $parent_id);
         }

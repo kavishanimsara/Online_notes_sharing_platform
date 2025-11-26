@@ -18,8 +18,16 @@ if (empty($action) || $note_id === 0) {
     exit();
 }
 
+// Check if status column exists
+$check_status = $conn->query("SHOW COLUMNS FROM notes LIKE 'status'");
+$has_status = $check_status->num_rows > 0;
+
 // Verify note exists
-$stmt = $conn->prepare("SELECT id FROM notes WHERE id = ? AND status = 'active'");
+$sql = "SELECT id FROM notes WHERE id = ?";
+if ($has_status) {
+    $sql .= " AND (status = 'approved' OR status IS NULL OR status = 'active')";
+}
+$stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $note_id);
 $stmt->execute();
 if ($stmt->get_result()->num_rows === 0) {
@@ -43,10 +51,13 @@ if ($action === 'toggle') {
         $stmt->execute();
         $stmt->close();
 
-        // Decrement likes count
-        $conn->query("UPDATE notes SET likes_count = likes_count - 1 WHERE id = $note_id");
+// Decrement likes count if column exists
+        $check_likes_count = $conn->query("SHOW COLUMNS FROM notes LIKE 'likes_count'");
+        if ($check_likes_count->num_rows > 0) {
+            $conn->query("UPDATE notes SET likes_count = likes_count - 1 WHERE id = $note_id");
+        }
 
-        logActivity($user_id, 'unfavorite_note', "Note ID: $note_id");
+        // logActivity($user_id, 'unfavorite_note', "Note ID: $note_id");
 
         $message = 'Removed from favorites';
         $is_favorited = false;
@@ -57,18 +68,28 @@ if ($action === 'toggle') {
         $stmt->execute();
         $stmt->close();
 
-        // Increment likes count
-        $conn->query("UPDATE notes SET likes_count = likes_count + 1 WHERE id = $note_id");
+// Increment likes count if column exists
+        $check_likes_count = $conn->query("SHOW COLUMNS FROM notes LIKE 'likes_count'");
+        if ($check_likes_count->num_rows > 0) {
+            $conn->query("UPDATE notes SET likes_count = likes_count + 1 WHERE id = $note_id");
+        }
 
-        logActivity($user_id, 'favorite_note', "Note ID: $note_id");
+        // logActivity($user_id, 'favorite_note', "Note ID: $note_id");
 
         $message = 'Added to favorites';
         $is_favorited = true;
     }
 
-    // Get updated count
-    $result = $conn->query("SELECT likes_count FROM notes WHERE id = $note_id");
-    $likes_count = $result->fetch_assoc()['likes_count'];
+// Get updated count
+    $check_likes_count = $conn->query("SHOW COLUMNS FROM notes LIKE 'likes_count'");
+    if ($check_likes_count->num_rows > 0) {
+        $result = $conn->query("SELECT likes_count FROM notes WHERE id = $note_id");
+        $likes_count = $result->fetch_assoc()['likes_count'];
+    } else {
+        // Calculate from note_likes table
+        $result = $conn->query("SELECT COUNT(*) as count FROM note_likes WHERE note_id = $note_id");
+        $likes_count = $result->fetch_assoc()['count'];
+    }
 
     echo json_encode([
         'success' => true,
@@ -84,9 +105,16 @@ if ($action === 'toggle') {
     $is_favorited = $stmt->get_result()->num_rows > 0;
     $stmt->close();
 
-    // Get likes count
-    $result = $conn->query("SELECT likes_count FROM notes WHERE id = $note_id");
-    $likes_count = $result->fetch_assoc()['likes_count'];
+// Get likes count
+    $check_likes_count = $conn->query("SHOW COLUMNS FROM notes LIKE 'likes_count'");
+    if ($check_likes_count->num_rows > 0) {
+        $result = $conn->query("SELECT likes_count FROM notes WHERE id = $note_id");
+        $likes_count = $result->fetch_assoc()['likes_count'];
+    } else {
+        // Calculate from note_likes table
+        $result = $conn->query("SELECT COUNT(*) as count FROM note_likes WHERE note_id = $note_id");
+        $likes_count = $result->fetch_assoc()['count'];
+    }
 
     echo json_encode([
         'success' => true,

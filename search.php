@@ -10,24 +10,51 @@ $tag = $_GET['tag'] ?? '';
 $uploader = $_GET['uploader'] ?? '';
 $sort = $_GET['sort'] ?? 'recent';
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-$per_page = NOTES_PER_PAGE;
+$per_page = 12; // Default per page if constant not defined
 $offset = ($page - 1) * $per_page;
 
+// Check database structure first
+$check_status = $conn->query("SHOW COLUMNS FROM notes LIKE 'status'");
+$has_status = $check_status->num_rows > 0;
+
+$check_likes_count = $conn->query("SHOW COLUMNS FROM notes LIKE 'likes_count'");
+$has_likes_count = $check_likes_count->num_rows > 0;
+
+$check_views = $conn->query("SHOW COLUMNS FROM notes LIKE 'views'");
+$has_views = $check_views->num_rows > 0;
+
 // Build SQL query
-$where_conditions = ["n.status = 'active'"];
+$where_conditions = [];
 $params = [];
 $types = '';
 
+if ($has_status) {
+    $where_conditions[] = "(n.status = 'approved' OR n.status IS NULL)";
+}
+
 if (!empty($query)) {
-    $where_conditions[] = "(n.title LIKE ? OR n.description LIKE ? OR n.ai_summary LIKE ?)";
+    $search_conditions = "(n.title LIKE ? OR n.description LIKE ?";
+    $check_ai_summary = $conn->query("SHOW COLUMNS FROM notes LIKE 'ai_summary'");
+    if ($check_ai_summary->num_rows > 0) {
+        $search_conditions .= " OR n.ai_summary LIKE ?";
+        $types .= 's';
+    }
+    $search_conditions .= ")";
+    $where_conditions[] = $search_conditions;
     $search_term = "%$query%";
     $params[] = $search_term;
     $params[] = $search_term;
-    $params[] = $search_term;
-    $types .= 'sss';
+    if ($check_ai_summary->num_rows > 0) {
+        $params[] = $search_term;
+    }
+    $types .= 'ss';
 }
 
-if (!empty($tag)) {
+// Check if tags system exists
+$check_tags_table = $conn->query("SHOW TABLES LIKE 'tags'");
+$check_note_tags_table = $conn->query("SHOW TABLES LIKE 'note_tags'");
+
+if (!empty($tag) && $check_tags_table->num_rows > 0 && $check_note_tags_table->num_rows > 0) {
     $where_conditions[] = "EXISTS (
         SELECT 1 FROM note_tags nt 
         JOIN tags t ON nt.tag_id = t.id 
@@ -46,14 +73,23 @@ if (!empty($uploader)) {
 $where_clause = implode(' AND ', $where_conditions);
 
 // Sorting
-$order_by = match($sort) {
-    'popular' => 'n.downloads DESC',
-    'liked' => 'n.likes_count DESC',
-    'viewed' => 'n.views DESC',
-    default => 'n.created_at DESC'
-};
+switch($sort) {
+    case 'popular':
+        $order_by = 'n.downloads DESC';
+        break;
+    case 'liked':
+        $order_by = $has_likes_count ? 'n.likes_count DESC' : 'n.created_at DESC';
+        break;
+    case 'viewed':
+        $order_by = $has_views ? 'n.views DESC' : 'n.created_at DESC';
+        break;
+    default:
+        $order_by = 'n.created_at DESC';
+        break;
+}
 
 // Count total results
+$where_clause = empty($where_conditions) ? '1=1' : implode(' AND ', $where_conditions);
 $count_sql = "SELECT COUNT(*) as total FROM notes n JOIN users u ON n.user_id = u.id WHERE $where_clause";
 $stmt = $conn->prepare($count_sql);
 if (!empty($params)) {
@@ -64,12 +100,14 @@ $total_results = $stmt->get_result()->fetch_assoc()['total'];
 $stmt->close();
 
 // Get results
-$sql = "SELECT n.*, u.username, 
-        (SELECT GROUP_CONCAT(t.name SEPARATOR ', ') 
-         FROM note_tags nt 
-         JOIN tags t ON nt.tag_id = t.id 
-         WHERE nt.note_id = n.id) as tags
-        FROM notes n 
+$sql = "SELECT n.*, u.username";
+if ($check_tags_table->num_rows > 0 && $check_note_tags_table->num_rows > 0) {
+    $sql .= ", (SELECT GROUP_CONCAT(t.name SEPARATOR ', ') 
+             FROM note_tags nt 
+             JOIN tags t ON nt.tag_id = t.id 
+             WHERE nt.note_id = n.id) as tags";
+}
+$sql .= " FROM notes n 
         JOIN users u ON n.user_id = u.id 
         WHERE $where_clause 
         ORDER BY $order_by 
@@ -85,7 +123,11 @@ $results = $stmt->get_result();
 $stmt->close();
 
 // Get popular tags
-$popular_tags = $conn->query("SELECT * FROM tags ORDER BY usage_count DESC LIMIT 20");
+if ($check_tags_table->num_rows > 0) {
+    $popular_tags = $conn->query("SELECT * FROM tags ORDER BY usage_count DESC LIMIT 20");
+} else {
+    $popular_tags = false;
+}
 
 // Calculate pagination
 $total_pages = ceil($total_results / $per_page);
@@ -112,11 +154,11 @@ include 'includes/header.php';
                         <label class="form-label">Tag</label>
                         <select name="tag" class="form-select">
                             <option value="">All Tags</option>
-                            <?php while ($t = $popular_tags->fetch_assoc()): ?>
+<?php if ($popular_tags): while ($t = $popular_tags->fetch_assoc()): ?>
                                 <option value="<?php echo $t['slug']; ?>" <?php echo $tag === $t['slug'] ? 'selected' : ''; ?>>
                                     <?php echo htmlspecialchars($t['name']); ?>
                                 </option>
-                            <?php endwhile; ?>
+                            <?php endwhile; endif; ?>
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -179,10 +221,14 @@ include 'includes/header.php';
                                 <span><i class="fas fa-calendar"></i> <?php echo date('M d, Y', strtotime($note['created_at'])); ?></span>
                             </div>
 
-                            <div class="d-flex justify-content-between text-muted small">
+<div class="d-flex justify-content-between text-muted small">
                                 <span><i class="fas fa-download"></i> <?php echo $note['downloads']; ?></span>
+                                <?php if ($has_likes_count): ?>
                                 <span><i class="fas fa-heart"></i> <?php echo $note['likes_count']; ?></span>
+                                <?php endif; ?>
+                                <?php if ($has_views): ?>
                                 <span><i class="fas fa-eye"></i> <?php echo $note['views']; ?></span>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <div class="card-footer bg-white">

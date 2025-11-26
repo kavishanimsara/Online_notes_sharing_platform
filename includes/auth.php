@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 require_once 'session_manager.php';
 
 function isLoggedIn() {
@@ -19,7 +21,7 @@ function requireLogin() {
         exit();
     }
     
-    // Check if current session is still valid
+// Check if current session is still valid
     if (!isCurrentSessionValid()) {
         session_destroy();
         header('Location: login.php?error=session_expired');
@@ -82,6 +84,30 @@ function requireSuperAdmin() {
     if (!isSuperAdmin()) {
         header('Location: admin/dashboard.php?error=access_denied');
         exit();
+    }
+}
+
+function logActivity($user_id, $action, $details = '') {
+    global $conn;
+    
+    // Check if admin_activity_log table exists
+    $check_table = $conn->query("SHOW TABLES LIKE 'admin_activity_log'");
+    if (!$check_table || $check_table->num_rows == 0) {
+        return; // Table doesn't exist, skip logging
+    }
+    
+    try {
+        $ip_address = $_SERVER['REMOTE_ADDR'] ?? '';
+        $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+        
+        $stmt = $conn->prepare("INSERT INTO admin_activity_log (admin_id, action, details, ip_address, user_agent) VALUES (?, ?, ?, ?, ?)");
+        if ($stmt) {
+            $stmt->bind_param("issss", $user_id, $action, $details, $ip_address, $user_agent);
+            $stmt->execute();
+            $stmt->close();
+        }
+    } catch (Exception $e) {
+        error_log("Activity logging error: " . $e->getMessage());
     }
 }
 ?>

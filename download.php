@@ -21,6 +21,15 @@ if (isset($_GET['id'])) {
             $update_stmt->execute();
             $update_stmt->close();
             
+            // Update views count if column exists
+            $check_views = $conn->query("SHOW COLUMNS FROM notes LIKE 'views'");
+            if ($check_views->num_rows > 0) {
+                $update_views = $conn->prepare("UPDATE notes SET views = views + 1 WHERE id = ?");
+                $update_views->bind_param("i", $note_id);
+                $update_views->execute();
+                $update_views->close();
+            }
+            
             // Set headers for file download
             header('Content-Description: File Transfer');
             header('Content-Type: application/octet-stream');
