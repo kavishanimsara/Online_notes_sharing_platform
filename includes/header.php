@@ -27,8 +27,9 @@ if (session_status() === PHP_SESSION_NONE) {
                 <li><a href="index.php">Home</a></li>
                 <?php if (isset($_SESSION['user_id'])): ?>
                     <li><a href="#" class="user-info">Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?></a></li>
-                    <li><a href="upload.php">Upload Note</a></li>
+                    <li><a href="upload_with_category.php">Upload Note</a></li>
                     <li><a href="dashboard.php">Dashboard</a></li>
+                    <li><a href="personal_details.php">My Account</a></li>
                     <li><a href="logout.php" class="btn-logout">Logout</a></li>
               
                 <?php else: ?>
